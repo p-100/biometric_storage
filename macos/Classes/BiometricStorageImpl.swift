@@ -131,8 +131,24 @@ class BiometricStorageImpl {
   }
   
   private func read(_ name: String, _ result: @escaping StorageCallback, _ promptInfo: IOSPromptInfo) {
-    
     let context = currentContext(name:name)
+    context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
+        localizedReason: promptInfo.accessTitle,
+        reply: { (success, evalPolicyError) in
+            hpdebug("BIOMETRIC evaluatePolicy: success: \(success), evalPolicyError: \(evalPolicyError)")
+            if success {
+                self.readAuthenticated(context, name, result, promptInfo)
+                return
+            } else {
+                // TODO: Pass error?
+                result(nil)
+                return
+            }
+        }
+    )
+  }
+
+  private func readAuthenticated(_ context: LAContext, _ name: String, _ result: @escaping StorageCallback, _ promptInfo: IOSPromptInfo) {
     var query = baseQuery(name: name)
     query[kSecMatchLimit as String] = kSecMatchLimitOne
     query[kSecUseOperationPrompt as String] = promptInfo.accessTitle
@@ -143,6 +159,7 @@ class BiometricStorageImpl {
     var item: CFTypeRef?
     
     let status = SecItemCopyMatching(query as CFDictionary, &item)
+    hpdebug("BIOMETRIC readAuthenticated: status: \(status)")
     guard status != errSecItemNotFound else {
       result(nil)
       return
@@ -269,7 +286,7 @@ class BiometricStorageImpl {
       context.localizedCancelTitle = "Checking auth support"
     }
     var error: NSError?
-    if context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) {
+    if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
       result("Success")
       return
     }
